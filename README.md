@@ -175,11 +175,13 @@ box (name matching) and the frames will scroll. Type `help` in the console.
   firmware family: its BT firmware image is plain code too, contains the same UART relay
   API (`SOURCE=%d`, `STANDBY=%d`, `DEMO=%d`, `AMP=%d`), the same `besaud` functions and a
   `build_cmd` that is **nearly identical** to gen-1's (session handle at the same state
-  offset `+0x310`, `0x80` type byte, same 96-byte length limit). Since gen-1 and gen-2
+  offset `+0x310`, type byte, same 96-byte length limit). Since gen-1 and gen-2
   PartyBoxes pair with each other over TWS, the wire protocol is the same — only the
-  build addresses and some log strings differ. (The gen-2 `parse_cmd` dispatch table was
-  not located only because it is compiled with different register allocation; the gen-2
-  build also adds an `ATS=` UART command not present in gen-1.)
+  build addresses and some log strings differ. The gen-2 `parse_cmd` dispatch was also
+  located: same envelope, but commands are **single-byte ids 1..18** (18-case table)
+  instead of gen-1's 16-bit `0x0100..0x0111`; only ~7 ids have real handlers
+  (playback control, value set, TWS teardown, one heavily state-gated action). The
+  gen-2 build also adds an `ATS=` UART command not present in gen-1.
 
 ## 8. Conclusion
 
