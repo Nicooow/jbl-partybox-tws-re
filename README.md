@@ -7,7 +7,8 @@ Tested on: **JBL PartyBox 200**, firmware v37 (`Harman_G1.HUI`, hardware gen 1, 
 The PartyBox 300 shares the same main board/firmware; the PartyBox 100 is close enough
 that the pairing rules below apply too.
 
-> Everything here was done on hardware I own, for interoperability and curiosity.
+> Everything here comes from the official firmware images and from observing real
+> hardware, for interoperability research.
 
 ## TL;DR
 
@@ -57,7 +58,7 @@ Notes:
   18-byte EIR: flags + manufacturer payload `[status][6 bytes]` + appearance `0xDAFE`).
   It looks like a TWS status beacon. In practice, the recipe above (name + Classic
   discoverable) was enough to get connected; we did not need to spoof the beacon.
-- Known quirk on some Broadcom-based SBCs (e.g. Khadas VIM3, AP6398S): `hcitool cmd
+- Known quirk on some Broadcom-based hosts (AP6398S-class controllers): `hcitool cmd
   08 06 ...` (LE Set Advertising Parameters) needs **15 bytes** on this firmware
   (an extra trailing filter-policy byte) while the spec says 14. If you don't need
   the LE beacon, ignore it.
@@ -211,9 +212,8 @@ Does **not** work / not reachable:
 
 - **Lights, bass boost, IR, source selection behind the switch** — these are handled
   locally by the main SoC (a Sunplus SPHE8107) and never cross the TWS link.
-  (On our unit, the LEDs are driven by a front-panel STM32F030 that receives
-  `55 xx ...` frames from the SPHE over a private UART — a separate protocol,
-  out of scope here.)
+  (The LEDs are driven by a front-panel STM32F030 that receives `55 xx ...` frames
+  from the SPHE over a private UART — a separate protocol, out of scope here.)
 - `0x010A` key sync: acked but no physical action was obtained with key ids 0x00–0x3F
   (press/release). Either the payload format differs or it only mirrors button state
   for display.
@@ -261,3 +261,5 @@ its new best friend.
 ## Files
 
 - `tws_server.py` — the fake TWS peer / dump server / remote.
+- `docs/frames/` — per-frame protocol reference for all 15 emitted frames
+  (index and shared state map in `docs/frames/README.md`).

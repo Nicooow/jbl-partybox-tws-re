@@ -63,11 +63,11 @@ states its own confidence and unknowns.
 
 ## Evidence base
 
-Firmware `extracted/payload_1.bin`, Thumb, linked at `0x3C000000` (file offset = VA − 0x3C000000),
-also mapped at `0x0C000000` (cached alias, Δ 0x30000000 — absolute code pointers use the `0x0C01…`
-form). All claims come from the Ghidra decompilation in `../../decomp/` plus targeted Thumb
-disassembly (`ghidra/thumb_dump.py`). Reproduce any address with:
+Firmware `payload_1.bin` (BES2000IK Bluetooth module), Thumb, linked at `0x3C000000` — file
+offset = VA − `0x3C000000`. The same bytes are also mapped at `0x0C000000` (cached alias,
+Δ `0x30000000`): absolute **code** pointers stored in tables and literal pools use the `0x0C01…`
+form (`0x0C014EA5` == `0x3C014EA5` == `FUN_3c014ea4|1`), while **string** pointers use `0x3C05…`.
+Every address on these pages is a virtual address in that image.
 
-```bash
-py ghidra/thumb_dump.py extracted/payload_1.bin 3C000000 <start_hex> <end_hex>
-```
+All of this comes from static analysis of that firmware image. Each page states its own confidence
+level and lists what remains unknown or unconfirmed.
