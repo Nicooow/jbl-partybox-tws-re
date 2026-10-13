@@ -144,6 +144,48 @@ Notable: commands `0x010E` and `0x010F` are **relayed by the Bluetooth module to
 main SoC over the internal UART** (`SOURCE=%d` / `STANDBY=%d` — the same control API
 used between the two chips), so a fake peer can reach beyond the Bluetooth module.
 
+### The command space is closed — and here is the *outbound* set
+
+Two facts from the decompiled code, both hard bounds rather than "we didn't find more":
+
+- **Frame types are exactly three.** The RX handler chains `if (b != 0x83) if (b != 0x81) if (b != 0x80) return;`
+  → `0x80` command, `0x81` response/ack, `0x83` audio. There is no fourth type.
+- **Command ids are exactly `0x0100`–`0x0111`.** `parse_cmd` does `subs r3,#0x100; cmp r3,#0x11; bhi default`
+  before the jump table, so id `0x0112` and above are rejected.
+
+Every outgoing command goes through one function, `tws_besaud_build_cmd`
+(`FUN_3c019fe0`), which prepends `0x80`, caps the frame at `0x61` (97) bytes, and is
+gated on the same session handle (`ctx+0x310`) as the ack path. Its callers are exactly
+the internal app-event handlers, so each internal event emits one frame:
+
+| Frame | Builder | Internal event |
+|---|---|---|
+| `0x0101` | `FUN_3c01ad18` | 0x01 |
+| `0x0105` | `FUN_3c01aca8` | 0x02 |
+| `0x0106` | `FUN_3c01ace4` | 0x03 |
+| `0x0107` | `FUN_3c01ad94` | 0x04 (stream config / channel mode) |
+| `0x0103` | `FUN_3c01af50` | 0x0A (teardown) |
+| `0x0104` | `FUN_3c01af7c` | 0x0E (playback action) |
+| `0x0108` | `FUN_3c01ae28` | 0x11 (channel) |
+| `0x0109` | `FUN_3c01afa8` | 0x12 |
+| `0x010A` | `FUN_3c01afd4` | 0x14 |
+| `0x010C` | `FUN_3c01a058` | via callback (no static caller) |
+| `0x010D` | `FUN_3c01b008` | via callback (no static caller) |
+| `0x010E` | `FUN_3c01ae68` | 0x18 (source) |
+| `0x010F` | `FUN_3c01aea4` | 0x19 (standby) |
+| `0x0110` | `FUN_3c01aed4` | 0x1A (channel) |
+| `0x0111` | `FUN_3c01af10` | 0x1B |
+
+Consequences worth knowing:
+
+- **`0x0100`, `0x0102` and `0x010B` are never emitted.** No builder anywhere produces
+  them (verified across the whole image), so they only ever travel peer → speaker.
+- Frames are 18 bytes (`0x12`) for most commands — the same fixed size as the ack, so a
+  real sniffer will see uniform 19-byte SPP payloads (`0x80` + 18) and 606-byte `0x83`
+  audio chunks.
+- Outbound `0x0104` carries the action as a **u32 at offset 2** (little-endian), zeros
+  elsewhere; outbound `0x0107` carries the channel mode byte at offset 5 (`2`/`3`/`4`).
+
 ## 4. Audio frames (0x83) — not fully reversed
 
 When audio plays, the master re-streams it to the peer over the same channel:
