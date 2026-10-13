@@ -92,21 +92,33 @@ Every command is acknowledged with an 18-byte frame: `0x81 + echoed cmd + status
 byte (0x00 = ok) + a 16-byte live state snapshot` (some bytes of the snapshot change
 with the playback state).
 
-Known command ids observed on the wire (from a live fake-peer session) or decoded
-in the firmware (`parse_cmd` @ firmware offset 0x1a1f4, a 17-case switch):
+Known command ids — decoded from the firmware (`parse_cmd` @ firmware offset 0x1a1f4:
+18-case table) **and** verified on a live fake-peer session:
 
-| Cmd | Meaning | Notes |
+| Cmd | Payload (after the cmd16) | Meaning |
 |---|---|---|
-| `0x0101` | state broadcast | payload[0] = 0x03 seen at connect |
-| `0x0103` | remote disconnect request | handled only in some TWS states |
-| `0x0104` | payload[0] = 0x06 → **PLAY/PAUSE toggle** | injection confirmed |
-| `0x0105` | [0]=value, [2]=action | action 0x02 = **set volume** (injection confirmed, value = volume level), action 0x01 seen on play |
-| `0x0106` | state sync | `02 00 00 ff ...` seen |
-| `0x0107` | stream config | contains sample rate as u16 LE (0xAC44 = 44100) |
-| `0x0108` | **stereo channel selector** | payload[0]: 02 = L+R, 03 = Left only, 04 = Right only |
-| `0x010A` | `SYNC_REM_KEY_STATUS` | u32 key @+0, flag byte @+4; acks fine but no visible action was obtained (see §6) |
-| `0x010E` | stream event | seen around play |
-| others   | 0x0102, 0x0109, 0x010B–0x010D, 0x010F–0x0111 | not identified |
+| `0x0100` | byte @0 | stored in speaker state |
+| `0x0101` | u32 @0, u32 @4, u32 @8, u16 @12, byte @15 | full state broadcast (14 useful bytes) |
+| `0x0102` | — | no-op (ack only) |
+| `0x0103` | — | TWS teardown (state-gated) |
+| `0x0104` | u32 @0 = action code | **0x06 = play/pause toggle (injection confirmed)**; posted as app-event 0x0F — other action codes untested |
+| `0x0105` | u32 @2, u32 @6, u32 @10, u16 @14 | player update; observed volume updates — **volume injection confirmed** (value in the low byte) |
+| `0x0106` | byte @0, byte @3, u32 @6 | state sync (`02 00 00 ff ...` seen) |
+| `0x0107` | bytes @0/@1/@3/@6, u32 @8, u32 @12 | stream config; u32 @12 = sample rate (0xAC44 = 44100) |
+| `0x0108` | byte @0: 02 = L+R, 03 = Left, 04 = Right | **stereo channel selector** |
+| `0x0109` | — | "remote want to disconnect the TWS" |
+| `0x010A` | u32 @0 = key id, byte @4 = flag (press/release) | `SYNC_REM_KEY_STATUS`; acks OK but no visible action for ids 0x00–0x3F |
+| `0x010B` | u32 @0, u32 @4 | forwarded to an unresolved setter (second flash bank) |
+| `0x010C` | — | triggers a conditional internal action |
+| `0x010D` | — | conditional action (internal states 1 / 0x10) |
+| `0x010E` | byte @0 = source id | **SOURCE selector** — relayed to the main SoC as `SOURCE=%d` over the internal UART |
+| `0x010F` | byte @0 = 0/1 | **STANDBY** — relayed to the main SoC as `STANDBY=%d` over the internal UART |
+| `0x0110` | byte @0: 02/03/04 | stereo channel selector (duplicate encoding of 0x0108) |
+| `0x0111` | byte @0 | forwarded to an internal function (state-gated) |
+
+Notable: commands `0x010E` and `0x010F` are **relayed by the Bluetooth module to the
+main SoC over the internal UART** (`SOURCE=%d` / `STANDBY=%d` — the same control API
+used between the two chips), so a fake peer can reach beyond the Bluetooth module.
 
 ## 4. Audio frames (0x83) — not fully reversed
 
