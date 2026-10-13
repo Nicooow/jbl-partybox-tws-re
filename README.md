@@ -163,7 +163,25 @@ sudo python3 tws_server.py
 Then power-cycle the speaker and start TWS pairing mode; it should connect to your
 box (name matching) and the frames will scroll. Type `help` in the console.
 
-## 7. Conclusion
+## 7. Firmware versions
+
+- The gen-1 command table is **identical** across firmware versions: v37 and 34.17.42
+  have byte-identical `parse_cmd` dispatch tables (all 18 entries, zero delta).
+  The protocol described here is the complete set for generation 1.
+- Newer firmware (v37) **expanded** the internal control API vs 34.17.42: the
+  `GAIN=`, `LR=`, `BYPASS=`, `SLEEP=`, `I2SIN=` UART commands were added
+  (`STANDBY`, `SOURCE`, `DEMO`, `MUTE`, `AMP` existed before).
+- The **generation 2** hardware (`Harman_G15.HUI`) runs a different **build** of the same
+  firmware family: its BT firmware image is plain code too, contains the same UART relay
+  API (`SOURCE=%d`, `STANDBY=%d`, `DEMO=%d`, `AMP=%d`), the same `besaud` functions and a
+  `build_cmd` that is **nearly identical** to gen-1's (session handle at the same state
+  offset `+0x310`, `0x80` type byte, same 96-byte length limit). Since gen-1 and gen-2
+  PartyBoxes pair with each other over TWS, the wire protocol is the same — only the
+  build addresses and some log strings differ. (The gen-2 `parse_cmd` dispatch table was
+  not located only because it is compiled with different register allocation; the gen-2
+  build also adds an `ATS=` UART command not present in gen-1.)
+
+## 8. Conclusion
 
 Honestly? Very little practical use — you get remote play/pause, volume and a stereo
 side selector for a speaker that already has buttons. But it was a fun ride: a
