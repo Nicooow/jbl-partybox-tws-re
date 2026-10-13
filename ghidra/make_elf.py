@@ -22,7 +22,7 @@ eh = struct.pack("<4sBBBBB7sHHIIIIIHHHHHH",
     40,     # EM_ARM
     1,
     load,   # entry
-    ehsize, phoff, 0, ehsize, phentsize, phnum, 40, 0, 0)
+    ehsize, 0, 0, ehsize, phentsize, phnum, 40, 0, 0)
 
 ph = struct.pack("<IIIIIIII",
     1, load, load, load, len(data), len(data), 7, 4)

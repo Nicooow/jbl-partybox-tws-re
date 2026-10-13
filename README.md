@@ -101,11 +101,11 @@ Known command ids — decoded from the firmware (`parse_cmd` @ firmware offset 0
 | `0x0101` | u32 @0, u32 @4, u32 @8, u16 @12, byte @15 | full state broadcast (14 useful bytes) |
 | `0x0102` | — | no-op (ack only) |
 | `0x0103` | — | TWS teardown (state-gated) |
-| `0x0104` | u32 @0 = action code | **0x06 = play/pause toggle (injection confirmed)**; posted as app-event 0x0F — other action codes untested |
+| `0x0104` | u32 @0 = action code | posted as app-event 0x0F. **Only codes 5, 6, 7, 8, 9 exist** (inner jump table) — see note below |
 | `0x0105` | u32 @2, u32 @6, u32 @10, u16 @14 | player update; observed volume updates — **volume injection confirmed** (value in the low byte) |
 | `0x0106` | byte @0, byte @3, u32 @6 | state sync (`02 00 00 ff ...` seen) |
 | `0x0107` | bytes @0/@1/@3/@6, u32 @8, u32 @12 | stream config; u32 @12 = sample rate (0xAC44 = 44100) |
-| `0x0108` | byte @0: 02 = L+R, 03 = Left, 04 = Right | **stereo channel selector** |
+| `0x0108` | byte @0: **01 or 02 = Stereo, 03 = Right, 04 = Left** | **stereo channel selector** |
 | `0x0109` | — | "remote want to disconnect the TWS" |
 | `0x010A` | u32 @0 = key id, byte @4 = flag (press/release) | `SYNC_REM_KEY_STATUS`; acks OK but no visible action for ids 0x00–0x3F |
 | `0x010B` | u32 @0, u32 @4 | forwarded to an unresolved setter (second flash bank) |
@@ -113,8 +113,32 @@ Known command ids — decoded from the firmware (`parse_cmd` @ firmware offset 0
 | `0x010D` | — | conditional action (internal states 1 / 0x10) |
 | `0x010E` | byte @0 = source id | **SOURCE selector** — relayed to the main SoC as `SOURCE=%d` over the internal UART |
 | `0x010F` | byte @0 = 0/1 | **STANDBY** — relayed to the main SoC as `STANDBY=%d` over the internal UART |
-| `0x0110` | byte @0: 02/03/04 | stereo channel selector (duplicate encoding of 0x0108) |
+| `0x0110` | byte @0: same encoding as 0x0108 | stereo channel selector (byte-identical duplicate handler of 0x0108) |
 | `0x0111` | byte @0 | forwarded to an internal function (state-gated) |
+
+### 0x0104 action codes (exhaustive)
+
+The handler is only `FUN_3c013298(u32)` → posts internal app-event `0x0F`. The event loop
+(`FUN_3c012E84`) then indexes a 5-entry absolute jump table (`0x3C012F44`) after
+`subs r3, #5; cmp r3, #4; bhi skip`, so **the only legal values are 5, 6, 7, 8, 9**:
+
+| code | target | behaviour |
+|---|---|---|
+| 5, 6, 8 | `0x3C012EE8` | shared handler: if role==1 and `ctx+0x15==0` → `FUN_3c0141f8(..., mode 2, ...)`, then if `0x3c043958()==1` → `FUN_3c0439ec()` — the play/resume path (0x06 = play/pause, injection-confirmed) |
+| 7 | `0x3C012F0C` | the loop tail → **no-op** |
+| 9 | `0x3C0130BC` | sets `ctx+0x15 = 1` (flag only) |
+
+### Channel selector `0x0108` / `0x0110` — why `01` does nothing special
+
+`parse_cmd` case 0x0108 only tests two values; everything else collapses into the stereo
+bucket. The mode is then passed to `FUN_3C015B18`, which prints it as a UART log line:
+
+| wire byte | internal mode | UART log |
+|---|---|---|
+| `01` or `02` | 2 | `TWSLR=S` (stereo) |
+| `03` | 4 | `TWSLR=R` (right) |
+| `04` | 3 | `TWSLR=L` (left) |
+
 
 Notable: commands `0x010E` and `0x010F` are **relayed by the Bluetooth module to the
 main SoC over the internal UART** (`SOURCE=%d` / `STANDBY=%d` — the same control API
@@ -138,7 +162,8 @@ Works over this channel (injected from the fake peer):
 
 - **play/pause toggle** : `80 04 01 06 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00`
 - **volume level NN**  : `80 05 01 NN 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00` (NN ≈ 0x00–0x19)
-- **stereo channel**   : `80 08 01 02/03/04 00 00 00 00 00 00 00 00 00 00 00 00 00 00`
+- **stereo channel**   : `80 08 01 02 00 ... 00` = stereo, `80 08 01 03 00 ... 00` = right,
+  `80 08 01 04 00 ... 00` = left (byte `01` behaves exactly like `02`)
 
 Does **not** work / not reachable:
 
